@@ -1,0 +1,63 @@
+# .clang-format
+BasedOnStyle: LLVM
+
+# 缩进设置
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 0  # 不限制行宽
+
+# ★ 预处理指令缩进（新增）
+IndentPPDirectives: None  # #if/#ifdef/#ifndef 后的内容缩进
+
+# 访问修饰符缩进 (public/private)
+AccessModifierOffset: -4  # public/private 不缩进
+
+# ★ 核心：大括号风格
+BreakBeforeBraces: Custom
+BraceWrapping:
+  # 类定义后的大括号换行
+  AfterClass: true      # class X {  →  class X\n{
+  AfterStruct: true     # struct X { →  struct X\n{
+  AfterEnum: true       # enum X {   →  enum X\n{
+  
+  # 函数后的大括号换行
+  AfterFunction: true   # void f() { →  void f()\n{
+  
+  # 命名空间后的大括号换行
+  AfterNamespace: true  # namespace X { →  namespace X\n{
+  
+  # 控制语句后的大括号不换行（保持 if() { 在一行）
+  AfterControlStatement: false  # if () { 保持一行
+  
+  # catch/else 前的大括号
+  BeforeCatch: false    # } catch {  →  } catch { (不换行)
+  BeforeElse: false     # } else {   →  } else { (不换行)
+  
+  # 其他
+  IndentBraces: false   # 不缩进大括号内部
+
+# ★ 简单函数保持一行
+AllowShortFunctionsOnASingleLine: Inline  # 只允许类定义内的函数在一行
+AllowShortBlocksOnASingleLine: false      # 一般块不在一行（但会被函数覆盖）
+
+# 构造函数初始化列表格式
+BreakConstructorInitializers: BeforeComma  # 逗号前换行
+ConstructorInitializerIndentWidth: 4       # 缩进4空格
+ConstructorInitializerAllOnOneLineOrOnePerLine: false  # 不强制全在一行
+
+# 指针对齐方式
+PointerAlignment: Left  # int* p 风格 (vs Right: int *p)
+
+# 空格控制
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements  # 控制语句前加空格
+SpaceInEmptyParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# 其他
+AlignConsecutiveAssignments: false  # 不对齐连续赋值
+AlignConsecutiveDeclarations: false # 不对齐连续声明
+AlignTrailingComments: false        # 不对齐尾部注释
+SortIncludes: false                  # 不排序头文件
