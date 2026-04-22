@@ -23,6 +23,7 @@ public:
     int getId() const { return id; }
     std::string getGroupName() const { return group_name; }
     std::string getGroupDesc() const { return group_desc; }
+    const std::vector<GroupUser>& getUsers() const { return this->users; }
     std::vector<GroupUser>& getUsers() { return this->users; }
 
 private:

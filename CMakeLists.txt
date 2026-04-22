@@ -21,6 +21,7 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/include/server/database
     ${PROJECT_SOURCE_DIR}/include/server/model
     ${PROJECT_SOURCE_DIR}/include/server/redis
+    ${PROJECT_SOURCE_DIR}/include/client
 )
 
 # 配置第三方搜索路径

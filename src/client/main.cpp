@@ -19,10 +19,15 @@ using namespace std;
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <semaphore.h>
+#include <atomic>
 
 #include "user.hpp"
 #include "group.hpp"
 #include "public.hpp"
+
+#include "session.hpp"
+#include "receiverThread.hpp"
 
 #ifdef DEBUGS
 // 调试模式: 执行代码块
@@ -37,40 +42,16 @@ using namespace std;
     #define DEBUG_LOG(msg) ((void)0)
 #endif
 
-// 记录当前登录用户信息
-User g_currentUser;
-// 记录当前登录用户好友信息
-vector<User> g_currentUserFriendVec;
-// 记录当前登录用户群组信息
-vector<Group> g_currentUserGroupVec;
-// 显示当前登录用户所有信息
-void showCurrentUserInfo();
-
-// 接收线程
-void readTaskHandler(int clientfd);
 // 获取系统时间(聊天信息需要添加时间信息)
 std::string getCurrentTime();
 // 安全输入整数
 int getIntInput();
 // 主聊天页面程序(登录后)
 void mainMenu(int clientfd);
-// 控制聊天页面程序
-bool isMainMenuRunning;
-
 
 // 聊天客户端程序实现 main线程作为发送线程 子线程作为接收线程
 int main(int argc, char* argv[])
 {
-    /*
-    if (argc != 3) {
-        cerr << "command invalid! example: ./ChatClient 127.0.0.1 6000" << endl;
-        exit(1);
-    }
-
-    // 解析命令行参数的ip和端口
-    char* ip = argv[1];
-    uint16_t port = atoi(argv[2]);
-    */
     char ip[] = "127.0.0.1";
     uint16_t port = 8000;
 
@@ -95,6 +76,15 @@ int main(int argc, char* argv[])
         exit(3);
     }
 
+    // 会话初始化
+    auto& session = UserSession::instance();
+
+    // 初始化读写线程信号量(已在UserSession中初始化)
+
+    // 连接服务器成功, 创建子线程接收数据 只创建一次
+    std::thread readTask(readTaskHandler, clientfd); // pthread_create
+    readTask.detach(); // pthread_detach
+
     // main线程: 接收用户输入 发送数据
     while (true) {
         // 显示首页面菜单: 登录、注册、退出
@@ -111,6 +101,8 @@ int main(int argc, char* argv[])
 
         switch (choice) {
         case 1: { // login
+            session.setLoginSuccess(false);
+
             int id;
             char pwd[50];
             cout << "userid:";
@@ -130,97 +122,15 @@ int main(int argc, char* argv[])
             if (len <= 0) {
                 cerr << "send login request error:" << request << endl;
             } else {
-                // 接收响应
-                char buffer[1024] = {0};
-                len = recv(clientfd, buffer, sizeof(buffer), 0);
-                if (len <= 0) {
-                    cerr << "receive login response error" << endl;
-                } else {
-                    // 响应反序列化
-                    json response = json::parse(buffer);
-
-                    // !!!根据错误代码判断请求是否成功
-                    if (response["errno"] != 0) {
-                        cerr << "failed to log in: " << response["errmsg"] << endl;
-                    } else {
-                        // 保存登录用户信息
-                        g_currentUser.setId(response["id"]);
-                        g_currentUser.setName(response["name"]);
-
-                        // 保存登录用户好友
-                        if (response.contains("friends")) {
-                            vector<string> friendJsonVec = response["friends"];
-                            for (string& str : friendJsonVec) {
-                                json js = json::parse(str);
-                                User user;
-                                user.setId(js["id"]);
-                                user.setName(js["name"]);
-                                user.setState(js["state"]);
-                                g_currentUserFriendVec.push_back(user);
-                            }
-                        }
-
-                        // 保存登录用户群组信息
-                        if (response.contains("groups")) {
-                            vector<string> groupsJsonVec = response["groups"];
-                            for (string& groupStr : groupsJsonVec) {
-                                json groupJs = json::parse(groupStr);
-                                Group group;
-                                group.setId(groupJs["id"]);
-                                group.setGroupName(groupJs["name"]);
-                                group.setGroupDesc(groupJs["desc"]);
-        
-                                // 反序列化群员数组
-                                vector<string> membersJsonVec = groupJs["members"];
-                                for (string& userStr : membersJsonVec) {
-                                    json userJs = json::parse(userStr);
-                                    GroupUser user;
-                                    user.setId(userJs["id"]);
-                                    user.setName(userJs["name"]);
-                                    user.setState(userJs["state"]);
-                                    user.setGroupRole(userJs["role"]);
-                                    group.getUsers().push_back(user);
-                                }
-        
-                                g_currentUserGroupVec.push_back(group);
-                            }
-                        }
-
-                        // 显示登录用户的基本信息
-                        showCurrentUserInfo();
-
-                        // 处理离线消息 显示好友消息和群组消息
-                        if (response.contains("offlinemsg")) {
-                            vector<string> offlineMsgVec = response["offlinemsg"];
-                            for (string& str : offlineMsgVec) {
-                                json msgJs = json::parse(str);
-                                if (msgJs["msgid"] == ONE_CHAT_MSG) {
-                                    // 私聊
-                                    cout << msgJs["time"].get<string>() << " [" << msgJs["id"] << "]"
-                                         << msgJs["from"].get<string>() << " said: " << msgJs["msg"].get<string>() << endl;
-                                } else if (msgJs["msgid"] == GROUP_CHAT_MSG) {
-                                    // 群聊
-                                    cout << "群消息[" << msgJs["groupid"] << "]:" << msgJs["time"].get<string>()
-                                         << " [" << msgJs["id"] << "]" << msgJs["from"].get<string>()
-                                         << " said: " << msgJs["msg"].get<string>() << endl;
-                                    // cout << msgJs["time"].get<string>() << " group[" << msgJs["groupid"] << "]"
-                                    //      << " [" << msgJs["id"] << "]" << msgJs["from"].get<string>()
-                                    //      << " said: " << msgJs["msg"].get<string>() << endl;
-                                }
-                            }
-                        }
-
-                        // 登录成功, 创建子线程接收数据 只创建一次
-                        static int readThreadNum = 0;
-                        if (readThreadNum == 0) {
-                            std::thread readTask(readTaskHandler, clientfd); // pthread_create
-                            readTask.detach(); // pthread_detach
-                            readThreadNum++;
-                        }
-    
-                        // 登录成功进入聊天页面
-                        mainMenu(clientfd);
-                    }
+                // 等待子线程接收响应 返回登录结果
+                session.rwWait();
+                // sem_wait(&rwSem);
+                if (session.isLoginSuccess()) {
+                // if (g_isLoginSuccess.load()) {
+                    // 登录成功 进入聊天主界面
+                    session.setMainMenuRunning(true);
+                    // isMainMenuRunning = true;
+                    mainMenu(clientfd);
                 }
             }
 
@@ -246,97 +156,19 @@ int main(int argc, char* argv[])
             if (len <= 0) {
                 cerr << "send signup msg error:" << request << endl;
             } else {
-                // 接收服务端的响应数据
-                char buffer[1024] = {0};
-                len = recv(clientfd, buffer, sizeof(buffer), 0);
-                if (len == -1) {
-                    cerr << "recv signup response error" << endl;
-                } else {
-                    // 反序列化为json
-                    json response = json::parse(buffer);
-                    if (response["errno"].get<int>() != 0) {
-                        // 注册失败
-                        cerr << name << " already exists, signup fails..." << endl;
-                    } else {
-                        // 注册成功
-                        cout << name << " sign up success, userid is " << response["id"]
-                             << ", do not forget it!" << endl;
-                        
-                    }
-                }
+                // 等待接收子线程处理响应
+                session.rwWait();
             }
 
             break;
         }
         case 3: { // quit
             close(clientfd);
+            // 信号量已在 UserSession 析构函数释放
             exit(0);
-            break;
         }
         default: { // 意外输入
             cerr << "invalid input" << endl;
-            break;
-        }
-        }
-    }
-}
-
-// 显示当前登录用户所有信息
-void showCurrentUserInfo()
-{
-    cout << "======================login user======================" << endl;
-    cout << "id:" << g_currentUser.getId() << " name:" << g_currentUser.getName() << endl;
-    cout << "---------------------Friend List---------------------" << endl;
-    for (User& user : g_currentUserFriendVec) {
-        cout << user.getId() << '\t'
-             << user.getName() << '\t'
-             << user.getState() << endl;
-    }
-    cout << "---------------------Group List---------------------" << endl;
-    for (Group& group : g_currentUserGroupVec) {
-        cout << group.getId() << '\t'
-             << group.getGroupName() << '\t'
-             << group.getGroupDesc() << endl;
-        cout << endl;
-        for (GroupUser& user : group.getUsers()) {
-            cout << user.getId() << '\t'
-                 << user.getName() << '\t'
-                 << user.getState() << '\t'
-                 << user.getGroupRole() << endl;
-        }
-        cout << "----------------------------------------------" << endl;
-    }
-    cout << "======================================================" << endl;
-}
-
-// 接收线程
-void readTaskHandler(int clientfd)
-{
-    while (true) {
-        char buffer[1024] = {0};
-        int len = recv(clientfd, buffer, sizeof(buffer), 0);
-        DEBUG_LOG(buffer);
-        if (len == -1 || len == 0) {
-            // close(clientfd);
-            DEBUG_LOG("close");
-            exit(0);
-        }
-
-        // 接收服务端数据 反序列化为json
-        json js = json::parse(buffer);
-        switch (js["msgid"].get<int>()) {
-        case ONE_CHAT_MSG: {
-            cout << js["time"].get<string>() << " [" << js["id"] << "]"
-                 << js["from"].get<string>() << " said: " << js["msg"].get<string>() << endl;
-            break;
-        }
-        case GROUP_CHAT_MSG: {
-            cout << "群消息[" << js["groupid"] << "]:" << js["time"].get<string>()
-                 << " [" << js["id"] << "]" << js["from"].get<string>()
-                 << " said: " << js["msg"].get<string>() << endl;
-            break;
-        }
-        default: {
             break;
         }
         }
@@ -417,10 +249,10 @@ unordered_map<string, function<void(int, string)>> commandHandlerMap = {
 // 主聊天页面程序(登录后)
 void mainMenu(int clientfd)
 {
+    auto& session = UserSession::instance();
     help();
-    isMainMenuRunning = true;
     char buffer[1024] = {0};
-    while (isMainMenuRunning) {
+    while (session.isMainMenuRunning()) {
         // 读取输入命令字符串
         cin.getline(buffer, sizeof(buffer));
         string commandbuf(buffer);
@@ -437,7 +269,7 @@ void mainMenu(int clientfd)
         if (it != commandHandlerMap.end()) {
             // 存在命令
             it->second(clientfd, commandbuf.substr(index + 1));
-            if (g_currentUser.getId() == -1) {
+            if (session.getCurrentUser().getId() == -1) {
                 // 已成功注销
                 break;
             }
@@ -461,13 +293,14 @@ void help(int, string)
 // "chat" command handler
 void chat(int clientfd, string str)
 {
+    auto& session = UserSession::instance();
     int index = str.find(':');
     if (index == -1) {
         cerr << "chat command invalid!" << endl;
         return;
     }
     int to = atoi(str.substr(0, index).c_str());
-    if (to == g_currentUser.getId()) {
+    if (to == session.getCurrentUser().getId()) {
         cerr << "could not chat with yourself!" << endl;
         return;
     }
@@ -480,8 +313,8 @@ void chat(int clientfd, string str)
 
     json js;
     js["msgid"] = ONE_CHAT_MSG;
-    js["id"] = g_currentUser.getId();
-    js["from"] = g_currentUser.getName();
+    js["id"] = session.getCurrentUser().getId();
+    js["from"] = session.getCurrentUser().getName();
     js["to"] = to;
     js["msg"] = msg;
     js["time"] = getCurrentTime();
@@ -495,11 +328,12 @@ void chat(int clientfd, string str)
 // "addfriend" command handler
 void addfriend(int clientfd, string str)
 {
+    auto& session = UserSession::instance();
     int friendid = atoi(str.c_str());
 
     json request;
     request["msgid"] = ADD_FRIEND_MSG;
-    request["id"] = g_currentUser.getId();
+    request["id"] = session.getCurrentUser().getId();
     request["friendid"] = friendid;
     string buffer = request.dump();
 
@@ -511,6 +345,7 @@ void addfriend(int clientfd, string str)
 // "creategroup" command handler
 void creategroup(int clientfd, string str)
 {
+    auto& session = UserSession::instance();
     int index = str.find(':');
     if (index == -1) {
         cerr << "creategroup command invalid!" << endl;
@@ -521,7 +356,7 @@ void creategroup(int clientfd, string str)
 
     json js;
     js["msgid"] = CREATE_GROUP_MSG;
-    js["id"] = g_currentUser.getId();
+    js["id"] = session.getCurrentUser().getId();
     js["name"] = name;
     js["desc"] = desc;
 
@@ -534,6 +369,7 @@ void creategroup(int clientfd, string str)
 // "joingroup" command handler
 void joingroup(int clientfd, string str)
 {
+    auto& session = UserSession::instance();
     int groupId = atoi(str.c_str());
     if (groupId < 0) {
         DEBUG_SCOPE(
@@ -545,7 +381,7 @@ void joingroup(int clientfd, string str)
     json js;
     js["msgid"] = JOIN_GROUP_MSG;
     js["groupid"] = groupId;
-    js["userid"] = g_currentUser.getId();
+    js["userid"] = session.getCurrentUser().getId();
     js["role"] = "normal";
 
     string buffer = js.dump();
@@ -557,6 +393,7 @@ void joingroup(int clientfd, string str)
 // "groupchat" command handler
 void groupchat(int clientfd, string str)
 {
+    auto& session = UserSession::instance();
     int index = str.find(':');
     if (index == -1) {
         cerr << "groupchat command invalid!" << endl;
@@ -567,8 +404,8 @@ void groupchat(int clientfd, string str)
     
     json js;
     js["msgid"] = GROUP_CHAT_MSG;
-    js["id"] = g_currentUser.getId();
-    js["from"] = g_currentUser.getName();
+    js["id"] = session.getCurrentUser().getId();
+    js["from"] = session.getCurrentUser().getName();
     js["groupid"] = groupId;
     js["msg"] = msg;
     js["time"] = getCurrentTime();
@@ -583,19 +420,18 @@ void groupchat(int clientfd, string str)
 // "logout" command handler
 void logout(int clientfd, string str)
 {
+    auto& session = UserSession::instance();
     json js;
     js["msgid"] = LOGOUT_MSG;
-    js["id"] = g_currentUser.getId();
+    js["id"] = session.getCurrentUser().getId();
 
     string buffer = js.dump();
     int len = send(clientfd, buffer.c_str(), buffer.size() + 1, 0);
     if (len <= 0) {
         cerr << "failed to send logout msg: " << buffer << endl;
     } else {
-        isMainMenuRunning = false;
+        session.setMainMenuRunning(false);
         // 清空缓存
-        g_currentUserFriendVec.clear();
-        g_currentUserGroupVec.clear();
-        g_currentUser = User();
+        session.clear();
     }
 }

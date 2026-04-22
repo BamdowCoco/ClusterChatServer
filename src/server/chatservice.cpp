@@ -176,6 +176,7 @@ void ChatService::signup(const TcpConnectionPtr& conn, json& js, Timestamp times
         json response;
         response["msgid"] = SIGNUP_MSG_ACK;
         response["errno"] = 0;
+        response["name"] = name;
         response["id"] = user.getId();
         conn->send(response.dump());
     } else {
@@ -183,6 +184,7 @@ void ChatService::signup(const TcpConnectionPtr& conn, json& js, Timestamp times
         json response;
         response["msgid"] = SIGNUP_MSG_ACK;
         response["errno"] = 1;
+        response["name"] = name;
         conn->send(response.dump());
     }
 }
