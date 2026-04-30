@@ -11,6 +11,8 @@
 class UserSession
 {
 public:
+    ~UserSession();
+    
     static UserSession& instance();
 
     /* set 方法 */
@@ -46,7 +48,6 @@ public:
 private:
     UserSession();
 
-    ~UserSession();
 
     // 记录当前登录用户信息
     User m_currentUser;
