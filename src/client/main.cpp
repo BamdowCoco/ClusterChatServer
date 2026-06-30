@@ -3,13 +3,11 @@
 #include <iostream>
 #include <thread>
 #include <unordered_map>
-#include <vector>
 #include <string>
 #include <sstream>
 #include <chrono>
 #include <ctime>
 
-#include "groupuser.hpp"
 #include "json.hpp"
 using json = nlohmann::json;
 using namespace std;
@@ -20,10 +18,8 @@ using namespace std;
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <semaphore.h>
-#include <atomic>
 
 #include "user.hpp"
-#include "group.hpp"
 #include "public.hpp"
 
 #include "session.hpp"
