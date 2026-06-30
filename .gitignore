@@ -1,3 +1,13 @@
 test/
-bin/
-build/
+
+bin/**
+!bin//.gitkeep
+
+build/**
+!build/.gitkeep
+
+.vscode/
+.claude/
+
+.clang-format
+CLAUDE.md
