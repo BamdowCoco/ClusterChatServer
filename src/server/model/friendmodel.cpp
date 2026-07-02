@@ -1,5 +1,8 @@
 #include "friendmodel.hpp"
-#include "database.hpp"
+#include "CommonConnectionPool.hpp"
+#include "Connection.hpp"
+#include "logger.hpp"
+
 #include <cstdio>
 #include <mysql/mysql.h>
 
@@ -13,10 +16,10 @@ bool FriendModel::insert(const Friend& friendItem)
     sprintf(sql, "INSERT INTO friend(user_id, friend_id) VALUE (%d, %d)",
             friendItem.getUserId(), friendItem.getFriendId());
 
-    // 2.构建MySQL对象
-    MySQL mysql;
-    if (mysql.connect()) {
-        if (mysql.update(sql)) {
+    // 2.获取连接
+    shared_ptr<Connection> connPtr = ConnectionPool::getInstance().getConnection();
+    if (connPtr) {
+        if (connPtr->update(sql)) {
             return true;
         }
     }
@@ -35,10 +38,10 @@ std::vector<User> FriendModel::queryAllFriend(int userId)
             userId);
 
     vector<User> vec;
-    // 2.构建MySQL对象
-    MySQL mysql;
-    if (mysql.connect()) {
-        MYSQL_RES* res = mysql.query(sql);
+    // 2.获取连接
+    shared_ptr<Connection> connPtr = ConnectionPool::getInstance().getConnection();
+    if (connPtr) {
+        MYSQL_RES* res = connPtr->query(sql);
         if (res != nullptr) {
             MYSQL_ROW row;
             while ((row = mysql_fetch_row(res)) != nullptr) {
@@ -51,6 +54,8 @@ std::vector<User> FriendModel::queryAllFriend(int userId)
             // 记得释放资源
             mysql_free_result(res);
         }
+    } else {
+        LOG("failed to get connection...");
     }
 
     return vec;

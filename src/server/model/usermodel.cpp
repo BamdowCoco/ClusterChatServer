@@ -1,7 +1,11 @@
 #include "usermodel.hpp"
-#include "database.hpp"
+#include "CommonConnectionPool.hpp"
+#include "Connection.hpp"
+#include "logger.hpp"
+
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <mysql/mysql.h>
 
 using namespace std;
@@ -14,15 +18,23 @@ bool UserModel::insert(User& user)
     sprintf(sql, "INSERT INTO user(name, password, state) VALUES('%s', '%s', '%s')",
             user.getName().c_str(), user.getPassword().c_str(), user.getState().c_str());
 
-    // 2.定义MySQl对象
-    MySQL mysql;
-    if (mysql.connect()) {
-        if (mysql.update(sql)) {
-            // 获取插入成功的用户 对应的 主键id
-            user.setId(mysql_insert_id(mysql.getConnection()));
+    // 2.获取连接
+    shared_ptr<Connection> connPtr = ConnectionPool::getInstance().getConnection();
+    if (connPtr) {
+        if (connPtr->update(sql)) {
+            // 获取插入成功的用户 对应的主键 id
+            user.setId(mysql_insert_id(connPtr->getConn()));
             return true;
         }
     }
+    // MySQL mysql;
+    // if (mysql.connect()) {
+    //     if (mysql.update(sql)) {
+    //         // 获取插入成功的用户 对应的 主键id
+    //         user.setId(mysql_insert_id(mysql.getConnection()));
+    //         return true;
+    //     }
+    // }
 
     return false;
 }
@@ -36,10 +48,12 @@ User UserModel::query(int id)
             id);
 
     // 2.创建MySQL对象
-    MySQL mysql;
-    if (mysql.connect()) {
+    // MySQL mysql;
+    // 2.获取连接
+    shared_ptr<Connection> connPtr = ConnectionPool::getInstance().getConnection();
+    if (connPtr) {
         // 执行查询语句
-        MYSQL_RES* res = mysql.query(sql);
+        MYSQL_RES* res = connPtr->query(sql);
         if (res != nullptr) {
             // 获取查询到的行
             MYSQL_ROW row = mysql_fetch_row(res);
@@ -58,6 +72,8 @@ User UserModel::query(int id)
             // 释放资源
             mysql_free_result(res);
         }
+    } else {
+        LOG("failed to get connection...");
     }
 
     return User();
@@ -72,11 +88,16 @@ bool UserModel::updateState(User& user)
             user.getState().c_str(), user.getId());
 
     // 2.构造MySQL对象执行语句
-    MySQL mysql;
-    if (mysql.connect()) {
-        if (mysql.update(sql)) {
+    // MySQL mysql;
+    // 2.获取连接
+    shared_ptr<Connection> connPtr = ConnectionPool::getInstance().getConnection();
+
+    if (connPtr) {
+        if (connPtr->update(sql)) {
             return true;
         }
+    } else {
+        LOG("failed to get connection...");
     }
 
     return false;
@@ -91,11 +112,16 @@ bool UserModel::resetAllState()
     sprintf(sql, "UPDATE user SET state = 'offline' WHERE state = 'online'");
 
     // 2.构造MySQL对象执行语句
-    MySQL mysql;
-    if (mysql.connect()) {
-        if (mysql.update(sql)) {
+    // MySQL mysql;
+    // 2.获取连接
+    shared_ptr<Connection> connPtr = ConnectionPool::getInstance().getConnection();
+
+    if (connPtr) {
+        if (connPtr->update(sql)) {
             return true;
         }
+    } else {
+        LOG("failed to get connection...");
     }
 
     return false;

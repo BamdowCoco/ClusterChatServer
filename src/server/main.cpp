@@ -1,3 +1,4 @@
+#include "CommonConnectionPool.hpp"
 #include "chatserver.hpp"
 #include "chatservice.hpp"
 #include <cstring>
@@ -12,6 +13,7 @@ using namespace muduo::net;
 void resetHandler(int)
 {
     ChatService::instance().reset();
+    ConnectionPool::getInstance().stop();
     exit(0);
 }
 

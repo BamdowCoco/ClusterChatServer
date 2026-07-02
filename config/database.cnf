@@ -1,0 +1,15 @@
+[database]
+ip=localhost
+port=3306
+username=root
+password=${DB_PASSWORD}
+dbname=chat
+
+[pool]
+init_size=10
+max_size=1024
+# 最大空闲时间 单位:s
+max_idle_time=60
+# 连接超时时间 单位:ms
+connection_timeout=100
+

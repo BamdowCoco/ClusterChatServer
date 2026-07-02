@@ -2,7 +2,6 @@
 #define USERMODEL_H
 
 #include "user.hpp"
-#include <string>
 
 // user表的数据操作类
 class UserModel

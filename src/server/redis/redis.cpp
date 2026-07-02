@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <hiredis/hiredis.h>
 #include <iostream>
+#include <thread>
 
 using namespace std;
 

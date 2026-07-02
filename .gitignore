@@ -8,6 +8,7 @@ build/**
 
 .vscode/
 .claude/
+docs/
 
 .clang-format
 CLAUDE.md

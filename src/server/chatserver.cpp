@@ -1,5 +1,8 @@
 #include "chatserver.hpp"
 #include "chatservice.hpp"
+
+#include "json.hpp"
+#include <functional>
 // #include <muduo/base/Logging.h>
 using namespace std;
 using namespace muduo;
