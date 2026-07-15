@@ -12,3 +12,7 @@ docs/
 
 .clang-format
 CLAUDE.md
+
+# 已废弃
+include/server/database/database.hpp
+src/server/database/database.cpp

@@ -1,10 +1,14 @@
 #include "chatservice.hpp"
 #include "offlinemessage.hpp"
 #include "public.hpp"
+#include <cstdint>
+#include <cstring>
 #include <muduo/base/Logging.h>
 #include <mutex>
 #include <string>
 #include <vector>
+
+#include <arpa/inet.h>
 
 using namespace std;
 using namespace muduo;
@@ -56,6 +60,20 @@ MsgHandler ChatService::getHandler(int msgid)
     return it->second;
 }
 
+// 封装数据包
+// 格式: 数据长度(4字节) + 原始数据
+std::string ChatService::buildPacket(const std::string& msg)
+{
+    string packet;
+    packet.resize(sizeof(uint32_t) + msg.size());
+
+    uint32_t len = htonl(msg.size());
+    memcpy(&packet[0], &len, sizeof(uint32_t));
+    memcpy(&packet[sizeof(uint32_t)], &msg[0], msg.size());
+
+    return packet;
+}
+
 // 处理登录业务 id password
 void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp timestp)
 {
@@ -72,7 +90,7 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp timest
             response["errno"] = 2;
             response["errmsg"] = "user already logged in";
             // response["errmsg"] = "该账号已登录";
-            conn->send(response.dump());
+            conn->send(buildPacket(response.dump()));
         } else {
             // 登录成功, 记录用户连接信息
             {
@@ -146,7 +164,7 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp timest
                 response["groups"] = groupsJsonVec;
             }
 
-            conn->send(response.dump());
+            conn->send(buildPacket(response.dump()));
         }
     } else {
         // 用户不存在/密码错误, 登录失败
@@ -155,7 +173,7 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp timest
         response["errno"] = 1;
         response["errmsg"] = "invalid userid or password";
         // response["errmsg"] = "用户id或者密码错误";
-        conn->send(response.dump());
+        conn->send(buildPacket(response.dump()));
     }
 }
 
@@ -178,14 +196,14 @@ void ChatService::signup(const TcpConnectionPtr& conn, json& js, Timestamp times
         response["errno"] = 0;
         response["name"] = name;
         response["id"] = user.getId();
-        conn->send(response.dump());
+        conn->send(buildPacket(response.dump()));
     } else {
         // 注册失败
         json response;
         response["msgid"] = SIGNUP_MSG_ACK;
         response["errno"] = 1;
         response["name"] = name;
-        conn->send(response.dump());
+        conn->send(buildPacket(response.dump()));
     }
 }
 
@@ -243,7 +261,7 @@ void ChatService::oneChat(const TcpConnectionPtr& conn, json& js, Timestamp time
         // 消息发送成功
         response["errno"] = 0;
     } while(0);
-    conn->send(response.dump());
+    conn->send(buildPacket(response.dump()));
 }
 
 // 处理客户端异常退出
@@ -294,7 +312,7 @@ void ChatService::addFriend(const TcpConnectionPtr& conn, json& js, Timestamp ti
         response["errno"] = 1;
         response["errmsg"] = "cannot add self";
         // response["errmsg"] = "不能添加自己为好友";
-        conn->send(response.dump());
+        conn->send(buildPacket(response.dump()));
         return;
     }
 
@@ -309,7 +327,7 @@ void ChatService::addFriend(const TcpConnectionPtr& conn, json& js, Timestamp ti
         response["errmsg"] = "cannot add duplicate friend";
         // response["errmsg"] = "添加好友失败, 不能重复添加好友";
     }
-    conn->send(response.dump());
+    conn->send(buildPacket(response.dump()));
 }
 
 // 创建群业务
@@ -346,7 +364,7 @@ void ChatService::createGroup(const TcpConnectionPtr& conn, json& js, Timestamp 
         break;
     }
 
-    conn->send(response.dump());
+    conn->send(buildPacket(response.dump()));
 }
 
 // 加入群业务
@@ -388,7 +406,7 @@ void ChatService::joinGroup(const TcpConnectionPtr& conn, json& js, Timestamp ti
         }
         break;
     }
-    conn->send(response.dump());
+    conn->send(buildPacket(response.dump()));
 }
 
 // 群聊天业务
@@ -433,7 +451,7 @@ void ChatService::groupChat(const TcpConnectionPtr& conn, json& js, Timestamp ti
         break;
     }
 
-    conn->send(response.dump());
+    conn->send(buildPacket(response.dump()));
 }
 
 // 处理注销业务
@@ -462,7 +480,7 @@ void ChatService::logout(const TcpConnectionPtr& conn, json& js, Timestamp times
         response["errno"] = 1;
     }
 
-    conn->send(response.dump());
+    conn->send(buildPacket(response.dump()));
 }
 
 // redis上报服务层回调函数

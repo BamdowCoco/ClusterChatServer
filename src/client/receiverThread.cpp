@@ -1,4 +1,6 @@
 #include "receiverThread.hpp"
+#include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <unistd.h>
 #include <sys/socket.h>
@@ -32,14 +34,27 @@ void readTaskHandler(int clientfd)
 {
     auto& session = UserSession::instance();
     while (true) {
-        char buffer[1024] = {0};
-        int len = recv(clientfd, buffer, sizeof(buffer), 0);
-        DEBUG_LOG(buffer);
-        if (len == -1 || len == 0) {
+        int ret;
+        // 接收数据长度
+        uint32_t len;
+        ret = recv(clientfd, &len, sizeof(uint32_t), 0);
+        if (ret == -1 || ret == 0) {
             // close(clientfd);
             DEBUG_LOG("close");
             exit(0);
         }
+        if (ret != sizeof(uint32_t)) {
+            DEBUG_LOG("failed to recv len");
+            exit(1);
+        }
+        len = ntohl(len);
+        DEBUG_LOG(len);
+
+        // 接收原始数据
+        string buffer;
+        buffer.resize(len);
+        ret = recv(clientfd, &buffer[0], len, 0);
+        DEBUG_LOG(buffer);
 
         // 接收服务端数据 反序列化为json
         json js = json::parse(buffer);

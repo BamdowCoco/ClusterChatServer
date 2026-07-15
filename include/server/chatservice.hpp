@@ -65,6 +65,10 @@ public:
 private:
     ChatService();
 
+    // 封装数据包
+    // 格式: 数据长度(4字节) + 原始数据
+    std::string buildPacket(const std::string& msg);
+
     // 存储消息id及其对应的处理方法
     std::unordered_map<int, MsgHandler> _msgHandlerMap;
 
