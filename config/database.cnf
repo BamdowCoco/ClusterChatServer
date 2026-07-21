@@ -7,9 +7,9 @@ dbname=chat
 
 [pool]
 init_size=10
-max_size=1024
+max_size=50
 # 最大空闲时间 单位:s
-max_idle_time=60
+max_idle_time=300
 # 连接超时时间 单位:ms
-connection_timeout=100
+connection_timeout=3000
 
