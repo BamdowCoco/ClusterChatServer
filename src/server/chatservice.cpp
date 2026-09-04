@@ -230,7 +230,7 @@ void ChatService::oneChat(const TcpConnectionPtr& conn, json& js, Timestamp time
             auto it = _userConnMap.find(toid);
             if (it != _userConnMap.end()) {
                 // 若有, 接收者在线, 则通过该连接转发消息
-                it->second->send(js.dump());
+                it->second->send(buildPacket(js.dump()));
                 // 消息发送成功
                 response["errno"] = 0;
                 break;
@@ -431,7 +431,7 @@ void ChatService::groupChat(const TcpConnectionPtr& conn, json& js, Timestamp ti
                 auto it = _userConnMap.find(id);
                 if (it != _userConnMap.end()) {
                     // 对于存在连接 即在线成员 直接转发消息
-                    it->second->send(js.dump());
+                    it->second->send(buildPacket(js.dump()));
                 } else {
                     // 不存在连接 查询成员是否在线
                     User user = _userModel.query(id);
@@ -489,7 +489,7 @@ void ChatService::handleRedisSubscribeMessage(int userId, std::string message)
     lock_guard<mutex> lock(_connMutex);
     auto it = _userConnMap.find(userId);
     if (it != _userConnMap.end()) {
-        it->second->send(message);
+        it->second->send(buildPacket(message));
         return;
     }
 
