@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <cstdint>
 #include <functional>
 #include <iostream>
 #include <thread>
@@ -38,6 +39,8 @@ using namespace std;
     #define DEBUG_LOG(msg) ((void)0)
 #endif
 
+// 发送数据包: [4字节长度头 + JSON 体]
+int sendPacket(int clientfd, const std::string& msg);
 // 获取系统时间(聊天信息需要添加时间信息)
 std::string getCurrentTime();
 // 安全输入整数
@@ -114,7 +117,7 @@ int main(int argc, char* argv[])
             string request = js.dump();
 
             // 发送请求
-            int len = send(clientfd, request.c_str(), request.size()+1, 0);
+            int len = sendPacket(clientfd, request);
             if (len <= 0) {
                 cerr << "send login request error:" << request << endl;
             } else {
@@ -148,7 +151,7 @@ int main(int argc, char* argv[])
             string request = js.dump();
 
             // 发送数据至服务端
-            int len = send(clientfd, request.c_str(), request.size()+1, 0);
+            int len = sendPacket(clientfd, request);
             if (len <= 0) {
                 cerr << "send signup msg error:" << request << endl;
             } else {
@@ -187,6 +190,16 @@ std::string getCurrentTime()
     strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &bt);
 
     return std::string(buffer);
+}
+
+// 发送数据包: [4字节长度头(网络字节序) + JSON 体]
+// 与服务端 onMessage 的分帧逻辑对应, 客户端 -> 服务端 统一使用变长数据包格式
+int sendPacket(int clientfd, const std::string& msg)
+{
+    uint32_t len = htonl(static_cast<uint32_t>(msg.size()));
+    std::string packet(reinterpret_cast<const char*>(&len), sizeof(uint32_t));
+    packet += msg;
+    return send(clientfd, packet.c_str(), packet.size(), 0);
 }
 
 // 安全输入整数
@@ -316,7 +329,7 @@ void chat(int clientfd, string str)
     js["time"] = getCurrentTime();
 
     string buffer = js.dump();
-    int len = send(clientfd, buffer.c_str(), buffer.size()+1, 0);
+    int len = sendPacket(clientfd, buffer);
     if(len <= 0) {
         cerr << "failed to send chat msg: " << buffer << endl;
     }
@@ -333,7 +346,7 @@ void addfriend(int clientfd, string str)
     request["friendid"] = friendid;
     string buffer = request.dump();
 
-    int len = send(clientfd, buffer.c_str(), buffer.size() + 1, 0);
+    int len = sendPacket(clientfd, buffer);
     if (len <= 0) {
         cerr << "failed to send add friend msg: " << buffer << endl;
     }
@@ -357,7 +370,7 @@ void creategroup(int clientfd, string str)
     js["desc"] = desc;
 
     string buffer = js.dump();
-    int len = send(clientfd, buffer.c_str(), buffer.size()+1, 0);
+    int len = sendPacket(clientfd, buffer);
     if(len <= 0) {
         cerr << "failed to send creategroup msg: " << buffer << endl;
     }
@@ -381,7 +394,7 @@ void joingroup(int clientfd, string str)
     js["role"] = "normal";
 
     string buffer = js.dump();
-    int len = send(clientfd, buffer.c_str(), buffer.size() + 1, 0);
+    int len = sendPacket(clientfd, buffer);
     if (len <= 0) {
         cerr << "failed to send joingroup msg: " << buffer << endl;
     }
@@ -408,7 +421,7 @@ void groupchat(int clientfd, string str)
     
     string buffer = js.dump();
     // DEBUG_LOG(buffer);
-    int len = send(clientfd, buffer.c_str(), buffer.size() + 1, 0);
+    int len = sendPacket(clientfd, buffer);
     if (len <= 0) {
         cerr << "failed to send groupchat msg: " << buffer << endl;
     }
@@ -422,7 +435,7 @@ void logout(int clientfd, string str)
     js["id"] = session.getCurrentUser().getId();
 
     string buffer = js.dump();
-    int len = send(clientfd, buffer.c_str(), buffer.size() + 1, 0);
+    int len = sendPacket(clientfd, buffer);
     if (len <= 0) {
         cerr << "failed to send logout msg: " << buffer << endl;
     } else {

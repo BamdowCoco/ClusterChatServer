@@ -13,7 +13,7 @@
 
 // 网络客户端核心：封装 QTcpSocket，负责协议打包/解包与消息分发
 // 与终端客户端 (src/client) 的职责对应：
-//   - 发送：JSON + '\0'（与终端 send(..., size()+1, 0) 一致）
+//   - 发送：4 字节大端长度头 + JSON 体（与终端/服务端一致）
 //   - 接收：4 字节大端长度头 + JSON 体（处理粘包/半包）
 class NetworkClient : public QObject
 {
@@ -62,7 +62,7 @@ private slots:
     void onSocketError(QAbstractSocket::SocketError socketError);
 
 private:
-    // 发送 JSON 字符串（客户端 -> 服务端格式：JSON + '\0'）
+    // 发送 JSON 字符串（客户端 -> 服务端格式：4 字节长度头 + JSON 体）
     void sendJson(const std::string& jsonStr);
     // 解析并分发服务端消息（服务端 -> 客户端格式：长度头 + JSON）
     void handleMessage(const std::string& jsonStr);

@@ -35,8 +35,12 @@ void NetworkClient::sendJson(const std::string& jsonStr)
     if (_socket->state() != QAbstractSocket::ConnectedState) {
         return;
     }
-    // 与终端客户端保持一致：客户端 -> 服务端 发送 JSON + '\0'
-    _socket->write(jsonStr.c_str(), static_cast<qint64>(jsonStr.size() + 1));
+    // 与终端客户端/服务端保持一致：客户端 -> 服务端 发送 [4字节大端长度头 + JSON 体]
+    quint32 len = qToBigEndian<quint32>(static_cast<quint32>(jsonStr.size()));
+    QByteArray packet;
+    packet.append(reinterpret_cast<const char*>(&len), sizeof(len));
+    packet.append(jsonStr.c_str(), static_cast<int>(jsonStr.size()));
+    _socket->write(packet);
 }
 
 void NetworkClient::sendLogin(int id, const QString& password)
