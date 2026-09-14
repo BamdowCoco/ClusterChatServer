@@ -12,10 +12,10 @@ Redis::Redis():_publishContext(nullptr), _subscribeContext(nullptr)
 
 Redis::~Redis()
 {
-    if (!_publishContext) {
+    if (_publishContext) {
         redisFree(_publishContext);
     }
-    if (!_subscribeContext) {
+    if (_subscribeContext) {
         redisFree(_subscribeContext);
     }
 }
@@ -51,6 +51,8 @@ bool Redis::connect()
 // 向redis指定的通道channel 发布消息
 bool Redis::publish(int channel, std::string message)
 {
+    // hiredis context 非线程安全, 多线程并发 publish 需加锁
+    lock_guard<mutex> lock(_publishMutex);
     redisReply* reply = (redisReply*)redisCommand(_publishContext, "PUBLISH %d %s", channel, message.c_str());
     if (reply == nullptr) {
         cerr << "failed to publish! channel:" << channel << " message:" << message << endl;
@@ -65,6 +67,9 @@ bool Redis::subscribe(int channel)
 {
     // SUBSCRIBE命令本身会造成线程阻塞等待通道里发生的消息 这里只进行订阅通道 并不监听通道消息
     // 通道消息的监听接收 专门在observerChannelMessage函数中 使用独立线程进行
+
+    // hiredis context 非线程安全, 多线程并发 subscribe 需加锁
+    lock_guard<mutex> lock(_subscribeMutex);
 
     // 只负责发送命令 不阻塞接收redis server响应消息
     if (REDIS_ERR == redisAppendCommand(_subscribeContext, "SUBSCRIBE %d", channel)) {
@@ -88,6 +93,9 @@ bool Redis::subscribe(int channel)
 // 向redis指定的通道 取消订阅消息
 bool Redis::unsubscribe(int channel)
 {
+    // hiredis context 非线程安全, 多线程并发 unsubscribe 需加锁
+    lock_guard<mutex> lock(_subscribeMutex);
+
     // 只负责发送命令 不阻塞接收redis server响应消息
     if (REDIS_ERR == redisAppendCommand(_subscribeContext, "UNSUBSCRIBE %d", channel)) {
         cerr << "failed to unsubscribe!" << endl;

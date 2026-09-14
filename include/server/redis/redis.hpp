@@ -3,6 +3,7 @@
 
 #include <hiredis/hiredis.h>
 #include <functional>
+#include <mutex>
 #include <string>
 
 class Redis
@@ -41,6 +42,12 @@ private:
 
     // 回调操作 收到订阅消息 上报给service层
     std::function<void(int, std::string)> _notifyMessageHandler;
+
+    // hiredis context 非线程安全, 多线程并发 publish 需加锁保护
+    std::mutex _publishMutex;
+
+    // 保护 _subscribeContext 写操作(subscribe/unsubscribe)的互斥锁
+    std::mutex _subscribeMutex;
 };
 
 #endif
