@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.12)
 
 project(chat)
 
@@ -31,3 +31,6 @@ include_directories(SYSTEM
 
 # 配置子目录
 add_subdirectory(${PROJECT_SOURCE_DIR}/src)
+
+# 压测基准程序(可选)
+add_subdirectory(${PROJECT_SOURCE_DIR}/bench)
