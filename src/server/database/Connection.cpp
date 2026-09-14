@@ -22,6 +22,10 @@ bool Connection::connect(std::string ip, unsigned short port,
                          std::string user, std::string password,
                          std::string dbname)
 {
+    // 防御: mysql_init 失败时 _conn 为 NULL, 传入 mysql_real_connect 会崩溃
+    if (_conn == nullptr) {
+        return false;
+    }
     MYSQL* p = mysql_real_connect(_conn, ip.c_str(), user.c_str(), password.c_str(),
                                   dbname.c_str(), port, nullptr, 0);
     return p != nullptr;

@@ -24,6 +24,7 @@ ConnectionPool::ConnectionPool() {
     // 运行标志位
     _isStop = false;
 
+#ifndef NO_CONNECTION_POOL
     // 创建初始连接
     for(int i=0;i<_initSize;i++) {
         Connection* connPtr = new Connection();
@@ -43,6 +44,7 @@ ConnectionPool::ConnectionPool() {
     thread scaner(std::bind(&ConnectionPool::scanConnectionTask, this));
     // 分离子线程
     scaner.detach();
+#endif
 }
 
 // 获取连接池单例
@@ -222,6 +224,14 @@ void ConnectionPool::scanConnectionTask() {
 
 // 外部接口 获取可用空闲连接
 std::shared_ptr<Connection> ConnectionPool::getConnection() {
+#ifdef NO_CONNECTION_POOL
+    // 对照组: 每次新建连接, 用完即销毁(无连接池)
+    auto conn = std::make_shared<Connection>();
+    if (!conn->connect(_ip, _port, _username, _password, _dbname)) {
+        return nullptr;
+    }
+    return conn;
+#else
     shared_ptr<Connection> sharedPtr;
 
     {
@@ -237,7 +247,7 @@ std::shared_ptr<Connection> ConnectionPool::getConnection() {
             LOG("获取空闲连接超时...");
             return nullptr;
         }
-        
+
         // 智能指针计数为0 会默认delete
         // 这里接管Connection普通指针 并 自定义删除器重新将连接指针加入到连接队列中
         // !!! 连接队列是临界资源 注意线程安全 !!!
@@ -248,12 +258,12 @@ std::shared_ptr<Connection> ConnectionPool::getConnection() {
         });
         _connectionQue.pop();
     }
-    
+
     // 通知生产者生产连接
     _cvProducer.notify_all();
 
     return sharedPtr;
-
+#endif
 }
 
 // 关闭连接池

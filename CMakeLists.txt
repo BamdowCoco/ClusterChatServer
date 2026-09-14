@@ -11,6 +11,12 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_definitions(DEBUGS)
 endif()
 
+# 性能对照: 编译无连接池版本(每次 DB 操作新建/销毁连接), 默认关闭
+option(NO_CONNECTION_POOL "编译无连接池对照组" OFF)
+if(NO_CONNECTION_POOL)
+    add_compile_definitions(NO_CONNECTION_POOL)
+endif()
+
 # 配置最终可执行文件输出路径
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 

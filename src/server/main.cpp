@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 #include <csignal>
+#include <mysql/mysql.h>
 using namespace std;
 using namespace muduo;
 using namespace muduo::net;
@@ -26,6 +27,15 @@ int main(int argc, char* argv[])
 
     char* ip = argv[1];
     uint16_t port = atoi(argv[2]);
+
+    // 多线程环境必须先由主线程完成 MySQL 库的一次性初始化。
+    // mysql_init() 内部会触发 mysql_server_init(), 该初始化非线程安全;
+    // 无连接池模式下多个 sub-reactor 线程并发首次 mysql_init() 会竞态崩溃,
+    // 故在此显式单线程初始化(mysql_library_init 是 mysql_server_init 的现代别名)。
+    if (mysql_library_init(0, nullptr, nullptr) != 0) {
+        cerr << "mysql_library_init failed!" << endl;
+        exit(1);
+    }
 
     // 捕获信号SIGINT 在服务器结束前进行指定操作
     // 回顾
