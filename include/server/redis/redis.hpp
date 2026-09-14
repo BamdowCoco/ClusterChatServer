@@ -4,6 +4,7 @@
 #include <hiredis/hiredis.h>
 #include <functional>
 #include <mutex>
+#include <queue>
 #include <string>
 
 class Redis
@@ -46,8 +47,11 @@ private:
     // hiredis context 非线程安全, 多线程并发 publish 需加锁保护
     std::mutex _publishMutex;
 
-    // 保护 _subscribeContext 写操作(subscribe/unsubscribe)的互斥锁
-    std::mutex _subscribeMutex;
+    // 订阅命令队列: 业务线程(sub-reactor)入队, 订阅线程独占 _subscribeContext 发送
+    // (避免 redisGetReply 内部 redisBufferWrite 与 redisAppendCommand 并发操作 obuf 导致崩溃)
+    std::queue<std::string> _subCommands;
+    std::mutex _subCmdMutex;
+    int _subCmdEventFd; // eventfd, 唤醒订阅线程处理新命令
 };
 
 #endif
