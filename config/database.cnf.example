@@ -1,0 +1,22 @@
+# 数据库连接池配置模板
+# 用法: 复制本文件为 database.cnf，并把 password 改成你的真实密码
+#       cp config/database.cnf.example config/database.cnf
+#
+# 密码支持两种写法:
+#   password=你的明文密码        -> 直接使用
+#   password=${DB_PASSWORD}     -> 从环境变量读取(适合 CI 或不想明文落盘)
+
+[database]
+ip=localhost
+port=3306
+username=root
+password=${DB_PASSWORD}
+dbname=chat
+
+[pool]
+init_size=10
+max_size=50
+# 最大空闲时间 单位:s
+max_idle_time=300
+# 连接超时时间 单位:ms
+connection_timeout=3000

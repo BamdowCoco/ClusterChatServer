@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <thread>
 #include <functional>
+#include <limits.h>
+#include <unistd.h>
 using namespace std;
 
 
@@ -49,12 +51,30 @@ ConnectionPool& ConnectionPool::getInstance() {
     return pool;
 }
 
+// 基于可执行文件定位 config 路径(不依赖 CWD): bin/ChatServer -> ../config/database.cnf
+static std::string getConfigPath()
+{
+    char exePath[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
+    if (len <= 0) {
+        return "../config/database.cnf"; // 回退到相对路径
+    }
+    exePath[len] = '\0';
+    std::string dir(exePath);
+    size_t pos = dir.find_last_of('/');
+    if (pos == std::string::npos) {
+        return "../config/database.cnf";
+    }
+    return dir.substr(0, pos) + "/../config/database.cnf";
+}
+
 // 从配置文件中加载配置项
 bool ConnectionPool::loadConfigFile() {
     // 打开文件
-    ifstream inFile("../config/database.cnf");
+    string configPath = getConfigPath();
+    ifstream inFile(configPath);
     if(!inFile) {
-        LOG("file: ../config/database.cnf do not exist!");
+        LOG("config file do not exist: " + configPath);
         return false;
     }
     // 读取文件

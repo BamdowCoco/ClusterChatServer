@@ -25,7 +25,7 @@
 | 连接池 | 单例 + 生产者-消费者 + shared_ptr RAII  | 条件变量通信、空闲连接定时回收、原子变量计数 |
 | 缓存/消息队列 | Redis (hiredis) | Pub/Sub 实现集群跨服务器消息转发 |
 | 客户端 | 原始 socket + POSIX 信号量 | 双线程模型，`sem_t` 同步请求-响应 |
-| 构建 | CMake 3.0+ | Debug 模式开启 `DEBUGS` 宏 |
+| 构建 | CMake 3.12+ | Debug 模式开启 `DEBUGS` 宏 |
 | 代码风格 | clang-format (LLVM) | 4 空格缩进，函数/类后大括号换行 |
 
 ## 架构概览
@@ -39,7 +39,8 @@ ClusterChatServer/
 ├── autobuild.sh                   # 一键构建脚本
 ├── CMakeLists.txt                 # 根 CMake 配置
 ├── config/
-│   └── database.cnf               # 数据库连接池配置（支持环境变量）
+│   ├── database.cnf.example       # 数据库连接池配置模板（密码用环境变量/明文）
+│   └── database.cnf               # 本地实际配置（gitignore，含真实密码）
 ├── include/
 │   ├── public.hpp                 # 共享协议：EnMsgType 枚举
 │   ├── client/                    # 客户端头文件 (session, receiverThread, messageHandler)
@@ -72,7 +73,7 @@ ClusterChatServer/
 | 依赖 | 安装方式 |
 |------|---------|
 | g++ (C++11+) | `sudo apt install g++` |
-| CMake 3.0+ | `sudo apt install cmake` |
+| CMake 3.12+ | `sudo apt install cmake` |
 | muduo | [源码编译安装](https://github.com/chenshuo/muduo) |
 | MySQL Server | `sudo apt install mysql-server libmysqlclient-dev` |
 | Redis Server | `sudo apt install redis-server` |
@@ -92,14 +93,19 @@ cd build && cmake .. && make
 
 ### 配置
 
-数据库连接池通过 `config/database.cnf` 配置文件管理，支持环境变量替换（`$VAR` 或 `${VAR}`）：
+数据库连接池通过 `config/database.cnf` 配置文件管理。该文件含真实密码，已加入 `.gitignore` 不入库；仓库提供模板 `config/database.cnf.example`，首次使用复制并填入密码：
+
+```bash
+cp config/database.cnf.example config/database.cnf
+# 编辑 config/database.cnf，把 password 改成你的数据库密码
+```
 
 ```ini
 [database]
 ip=localhost
 port=3306
 username=root
-password=${DB_PASSWORD}   # 支持环境变量
+password=你的数据库密码        # 明文；也可写成 ${DB_PASSWORD} 引用环境变量
 dbname=chat
 
 [pool]
@@ -108,6 +114,8 @@ max_size=1024             # 最大连接数
 max_idle_time=60          # 最大空闲时间 (秒)
 connection_timeout=100    # 连接超时 (毫秒)
 ```
+
+配置值支持环境变量替换：某值写成 `$VAR` 或 `${VAR}` 时，启动时从环境变量读取（可用于 CI 覆盖密码）。
 
 Redis 连接参数在 `src/server/redis/redis.cpp` 中配置（默认 `127.0.0.1:6379`）。
 

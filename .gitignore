@@ -16,3 +16,6 @@ CLAUDE.md
 # 已废弃
 include/server/database/database.hpp
 src/server/database/database.cpp
+
+# 本地配置(含真实数据库密码, 不入库)
+config/database.cnf
