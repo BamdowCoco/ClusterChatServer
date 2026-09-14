@@ -1,10 +1,13 @@
+#include <algorithm>
 #include <arpa/inet.h>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <mutex>
 #include <netinet/in.h>
+#include <numeric>
 #include <string>
 #include <sys/socket.h>
 #include <thread>
@@ -292,12 +295,122 @@ int benchChat(const char* ip, uint16_t port, int senders, int msgsPerSender)
     return 0;
 }
 
+// 模式4: 跨节点转发延迟, 测 A(server1) -> Redis Pub/Sub -> B(server2) 的端到端延迟
+int benchCross(const char* ip1, uint16_t port1, const char* ip2, uint16_t port2, int n)
+{
+    string suffix = makeSuffix();
+
+    // 接收者 B: 连 server2 注册登录(B 登录时 server2 已 subscribe(B))
+    int recvFd = connectToServer(ip2, port2);
+    if (recvFd < 0) {
+        cerr << "接收者连接 server2 失败" << endl;
+        return 1;
+    }
+    int recvId = signupAndLogin(recvFd, "bench_cross_recv_" + suffix);
+    if (recvId < 0) {
+        cerr << "接收者登录 server2 失败" << endl;
+        close(recvFd);
+        return 1;
+    }
+
+    // 发送者 A: 连 server1 注册登录
+    int sendFd = connectToServer(ip1, port1);
+    if (sendFd < 0) {
+        cerr << "发送者连接 server1 失败" << endl;
+        close(recvFd);
+        return 1;
+    }
+    int sendId = signupAndLogin(sendFd, "bench_cross_send_" + suffix);
+    if (sendId < 0) {
+        cerr << "发送者登录 server1 失败" << endl;
+        close(sendFd);
+        close(recvFd);
+        return 1;
+    }
+
+    // 每条消息的发送时刻(序号 = 下标)
+    vector<chrono::steady_clock::time_point> t_send(static_cast<size_t>(n));
+
+    // 端到端延迟(ms), 接收线程写入
+    vector<double> latencies;
+    mutex latMutex;
+
+    // B 端接收线程: 逐条记录到达时刻
+    thread recvThread([&] {
+        string body;
+        while (recvPacket(recvFd, body)) {
+            try {
+                json js = json::parse(body);
+                if (js.value("msgid", -1) == ONE_CHAT_MSG) {
+                    int seq = stoi(js.value("msg", "0"));
+                    if (seq >= 0 && seq < n) {
+                        auto tRecv = chrono::steady_clock::now();
+                        double ms = chrono::duration<double, milli>(tRecv - t_send[static_cast<size_t>(seq)]).count();
+                        lock_guard<mutex> lock(latMutex);
+                        latencies.push_back(ms);
+                    }
+                }
+            } catch (const std::exception&) {
+                // 忽略解析异常
+            }
+        }
+    });
+
+    // A 端逐条发送, 每条间隔 2ms, 避免批量排队效应, 测单条转发延迟
+    int sendFail = 0;
+    for (int i = 0; i < n; i++) {
+        json js;
+        js["msgid"] = ONE_CHAT_MSG;
+        js["id"] = sendId;
+        js["from"] = "bench_cross_send_" + suffix;
+        js["to"] = recvId;
+        js["msg"] = to_string(i);
+        js["time"] = "2026-09-15 00:00:00";
+        t_send[static_cast<size_t>(i)] = chrono::steady_clock::now();
+        if (!sendPacket(sendFd, js.dump())) {
+            sendFail++;
+            break;
+        }
+        this_thread::sleep_for(chrono::milliseconds(2));
+    }
+    close(sendFd);
+
+    // 等待 B 端收完尾部消息
+    this_thread::sleep_for(chrono::seconds(1));
+
+    // 用 shutdown 唤醒阻塞在 recv 的接收线程(close 不会唤醒), 再关闭
+    shutdown(recvFd, SHUT_RDWR);
+    recvThread.join();
+    close(recvFd);
+
+    if (latencies.empty()) {
+        cerr << "未收到任何跨节点消息" << endl;
+        return 1;
+    }
+
+    sort(latencies.begin(), latencies.end());
+    double avg = accumulate(latencies.begin(), latencies.end(), 0.0) / static_cast<double>(latencies.size());
+    size_t p50Idx = static_cast<size_t>(latencies.size() * 0.50);
+    size_t p99Idx = static_cast<size_t>(latencies.size() * 0.99);
+    if (p50Idx >= latencies.size()) p50Idx = latencies.size() - 1;
+    if (p99Idx >= latencies.size()) p99Idx = latencies.size() - 1;
+
+    cout << "===== 跨节点转发延迟 =====" << endl;
+    cout << "发送: " << n << " 条, 接收: " << latencies.size() << " 条, 发送失败: " << sendFail << endl;
+    cout << "平均延迟: " << avg << " ms" << endl;
+    cout << "P50 延迟: " << latencies[p50Idx] << " ms" << endl;
+    cout << "P99 延迟: " << latencies[p99Idx] << " ms" << endl;
+    cout << "最大延迟: " << latencies.back() << " ms" << endl;
+    return 0;
+}
+
 void usage()
 {
     cout << "用法:" << endl;
     cout << "  bench conn  <ip> <port> <连接数>" << endl;
     cout << "  bench login <ip> <port> <客户端数>" << endl;
     cout << "  bench chat  <ip> <port> <发送端数> <每端消息数>" << endl;
+    cout << "  bench cross <ip1> <port1> <ip2> <port2> <消息数>" << endl;
 }
 
 int main(int argc, char* argv[])
@@ -315,6 +428,10 @@ int main(int argc, char* argv[])
     }
     if (mode == "chat" && argc == 6) {
         return benchChat(argv[2], static_cast<uint16_t>(atoi(argv[3])), atoi(argv[4]), atoi(argv[5]));
+    }
+    if (mode == "cross" && argc == 7) {
+        return benchCross(argv[2], static_cast<uint16_t>(atoi(argv[3])),
+                          argv[4], static_cast<uint16_t>(atoi(argv[5])), atoi(argv[6]));
     }
     usage();
     return 1;
